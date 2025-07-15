@@ -5,13 +5,15 @@ A modern, AI-powered resume screening system that converts the original n8n work
 ## 🚀 Features
 
 - **AI-Powered Analysis**: Uses GPT-4o-mini for intelligent resume screening
+- **Matrix Processing**: Screen multiple resumes against multiple job descriptions
+- **Flexible Input Methods**: Upload files, paste text, Google Drive links, or CSV with links
 - **Multi-Format Support**: Handles PDF, DOCX, and TXT files
 - **Google Drive Integration**: Direct processing from Google Drive links
-- **Batch Processing**: Screen one resume against multiple job descriptions
-- **Structured Output**: Detailed analysis with strengths, weaknesses, risk/reward assessment
-- **Web Interface**: Beautiful Gradio-based UI (Gladio-compatible)
+- **Job Description Scraping**: Automatically extract job descriptions from URLs
+- **Professional UI**: Clean, modern interface with collapsible instructions
+- **Comprehensive Results**: Detailed analysis with strengths, weaknesses, risk/reward assessment
+- **CSV Export**: Download complete results for further analysis
 - **LangGraph Workflow**: State-based processing with clear data flow
-- **Export Ready**: Prepared data for Google Sheets integration
 - **Modern Package Management**: Uses `uv` for fast dependency resolution
 
 ## 📋 System Architecture
@@ -103,27 +105,62 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 
 ### 6. Run the Application
 
-#### Single Job Screening (Simple Interface)
+#### Unified Interface (Recommended)
 ```bash
+uv run python unified_resume_screener.py
+```
+The unified interface will be available at `http://localhost:7860`
+
+#### Legacy Interfaces
+```bash
+# Simple interface (single resume vs single job)
 uv run python simple_gladio_app.py
-```
-The web interface will be available at `http://localhost:7860`
 
-#### Batch Processing (Multiple Jobs)
-```bash
+# Batch interface (single resume vs multiple jobs)
 uv run python batch_gladio_app.py
-```
-The batch interface will be available at `http://localhost:7861`
 
-#### Full Google Cloud Integration
-```bash
+# Full Google Cloud integration
 uv run python gladio_app.py
 ```
-The full interface will be available at `http://localhost:7860`
 
 ## 📖 Usage Guide
 
-### Basic Usage
+### Unified Interface Usage
+
+The unified interface supports matrix processing of multiple resumes against multiple job descriptions:
+
+#### Input Options
+
+**Resumes:**
+- **Upload File**: Upload PDF, DOCX, or TXT resume files
+- **Paste Text**: Copy and paste resume text directly
+- **Google Drive Link**: Provide a Google Drive link to your resume
+- **CSV with Links**: Upload a CSV file with multiple resume links (one per row)
+
+**Job Descriptions:**
+- **Upload File**: Upload PDF, DOCX, or TXT job description files
+- **Paste Text**: Copy and paste job description text directly
+- **URL Link**: Provide a URL to a job posting (will be automatically scraped)
+- **CSV with Links**: Upload a CSV file with multiple job description links (one per row)
+
+#### Processing
+
+1. **Select Input Methods**: Choose how you want to provide resumes and job descriptions
+2. **Provide Data**: Upload files, paste text, or provide links based on your selection
+3. **Start Analysis**: Click "Start Matrix Analysis" to process all combinations
+4. **Review Results**: View the results table with detailed analysis for each combination
+5. **Export Data**: Download the complete results as a CSV file
+
+#### Results
+
+- **Matrix Processing**: If you have 3 resumes and 3 job descriptions, you get 9 analysis results
+- **Compact Table**: Each row shows resume, job description, and key metrics
+- **Detailed Views**: Click "View Full Analysis" for complete breakdown
+- **CSV Export**: Download all results for further analysis in Excel or Google Sheets
+
+### Legacy Interface Usage
+
+For single resume vs single job description analysis:
 
 1. **Prepare Your Resume**: Upload a resume to Google Drive and make it accessible via link
 2. **Get the Link**: Right-click the file in Google Drive → "Get link" → Copy the link
