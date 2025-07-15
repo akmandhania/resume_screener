@@ -62,10 +62,10 @@ resume-screener = "gladio_app:main"
 test-system = "test_system:main"
 
 [project.urls]
-Homepage = "https://github.com/arunmandhania/resume-screening-system"
-Repository = "https://github.com/arunmandhania/resume-screening-system"
-Documentation = "https://github.com/arunmandhania/resume-screening-system#readme"
-Issues = "https://github.com/arunmandhania/resume-screening-system/issues"
+Homepage = "https://github.com/akmandhania/resume_screener"
+Repository = "https://github.com/akmandhania/resume_screener"
+Documentation = "https://github.com/akmandhania/resume_screener#readme"
+Issues = "https://github.com/akmandhania/resume_screener/issues"
 
 [tool.black]
 line-length = 88
