@@ -1,6 +1,6 @@
-# Resume Screening System with LangGraph and Gladio
+# Unified Resume Screening System
 
-A modern, AI-powered resume screening system that converts the original n8n workflow to a Python-based LangGraph implementation with a web interface.
+A modern, AI-powered resume screening system with matrix processing capabilities. Screen multiple resumes against multiple job descriptions with a single, unified interface.
 
 ## 🚀 Features
 
@@ -105,27 +105,15 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 
 ### 6. Run the Application
 
-#### Unified Interface (Recommended)
+#### Run the Application
 ```bash
 uv run python unified_resume_screener.py
 ```
-The unified interface will be available at `http://localhost:7860`
-
-#### Legacy Interfaces
-```bash
-# Simple interface (single resume vs single job)
-uv run python simple_gladio_app.py
-
-# Batch interface (single resume vs multiple jobs)
-uv run python batch_gladio_app.py
-
-# Full Google Cloud integration
-uv run python gladio_app.py
-```
+The interface will be available at `http://localhost:7860`
 
 ## 📖 Usage Guide
 
-### Unified Interface Usage
+### Usage Guide
 
 The unified interface supports matrix processing of multiple resumes against multiple job descriptions:
 
@@ -158,22 +146,9 @@ The unified interface supports matrix processing of multiple resumes against mul
 - **Detailed Views**: Click "View Full Analysis" for complete breakdown
 - **CSV Export**: Download all results for further analysis in Excel or Google Sheets
 
-### Legacy Interface Usage
-
-For single resume vs single job description analysis:
-
-1. **Prepare Your Resume**: Upload a resume to Google Drive and make it accessible via link
-2. **Get the Link**: Right-click the file in Google Drive → "Get link" → Copy the link
-3. **Open the Web Interface**: Navigate to `http://localhost:7860`
-4. **Input Data**:
-   - Paste the Google Drive link in the first field
-   - Enter or modify the job description in the second field
-5. **Analyze**: Click "Analyze Resume" to start the screening process
-6. **Review Results**: View the detailed analysis and spreadsheet export preview
-
 ### Supported File Formats
 
-- **PDF**: Direct text extraction
+- **PDF**: Direct text extraction with PyPDF2
 - **DOCX**: Microsoft Word documents
 - **TXT**: Plain text files
 
@@ -183,21 +158,23 @@ The system supports these Google Drive link formats:
 - `https://drive.google.com/file/d/FILE_ID/view`
 - `https://drive.google.com/open?id=FILE_ID`
 
-### Batch Processing Usage
+### CSV Export
 
-For screening one resume against multiple job descriptions:
+The system automatically generates a comprehensive CSV export with the following columns:
+- Resume Name, Resume Source, Job Description Name, Job Description Source
+- Candidate First Name, Last Name, Email
+- Overall Fit Rating, Risk Score, Reward Score
+- Strengths, Weaknesses, Risk Explanation, Reward Explanation, Justification
 
-1. **Prepare Job URLs**: Create a CSV file with job URLs:
-   ```csv
-   Job URL
-   https://www.linkedin.com/jobs/view/example1
-   https://www.indeed.com/viewjob?jk=example2
-   https://www.glassdoor.com/job-listing/example3
-   ```
+### Example CSV Input Format
 
-2. **Start Batch Interface**: Navigate to `http://localhost:7861`
-
-3. **Upload Files**: 
+For job descriptions, create a CSV file with job URLs:
+```csv
+Job URL
+https://www.linkedin.com/jobs/view/example1
+https://www.indeed.com/viewjob?jk=example2
+https://www.glassdoor.com/job-listing/example3
+```
    - Upload your resume file
    - Upload your job URLs CSV file
 
@@ -295,7 +272,7 @@ Or use `uv run` directly:
 
 ```bash
 # Start the web interface
-uv run python gladio_app.py
+uv run python unified_resume_screener.py
 
 # Run tests
 uv run python test_system.py

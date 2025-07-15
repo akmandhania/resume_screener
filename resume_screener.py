@@ -73,7 +73,7 @@ class FileProcessorNode:
     """Process Google Drive link and extract file information"""
     
     def __init__(self):
-        self.drive_service = self._get_drive_service()
+        self._drive_service = None
     
     def _get_drive_service(self):
         """Initialize Google Drive service"""
@@ -108,17 +108,58 @@ class FileProcessorNode:
             query_params = parse_qs(parsed.query)
             if 'id' in query_params:
                 return query_params['id'][0]
+        elif '/document/d/' in drive_link:
+            # Format: https://docs.google.com/document/d/FILE_ID/edit
+            match = re.search(r'/document/d/([a-zA-Z0-9-_]+)', drive_link)
+            if match:
+                return match.group(1)
+        elif '/spreadsheets/d/' in drive_link:
+            # Format: https://docs.google.com/spreadsheets/d/FILE_ID/edit
+            match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', drive_link)
+            if match:
+                return match.group(1)
         
-        raise ValueError("Invalid Google Drive link format")
+        raise ValueError(f"Invalid Google Drive link format: {drive_link[:50]}...")
     
     def __call__(self, state: ResumeScreeningState) -> ResumeScreeningState:
         """Process the Google Drive link and extract file info"""
         try:
+            # If we already have resume text, skip file processing
+            if state.get("resume_text"):
+                return {
+                    **state,
+                    "file_id": None,
+                    "file_name": "Direct Text Input",
+                    "file_type": "text",
+                    "error": None
+                }
+            
+            # If no Google Drive link provided, return error
+            if not state["google_drive_link"]:
+                return {
+                    **state,
+                    "error": "No Google Drive link provided and no resume text available"
+                }
+            
             # Extract file ID from link
             file_id = self._extract_file_id(state["google_drive_link"])
             
+            # Get drive service
+            try:
+                drive_service = self._get_drive_service()
+            except FileNotFoundError:
+                return {
+                    **state,
+                    "error": "Google Drive service not available. Please check credentials.json file."
+                }
+            except Exception as e:
+                return {
+                    **state,
+                    "error": f"Google Drive service error: {str(e)}"
+                }
+            
             # Get file metadata
-            file_metadata = self.drive_service.files().get(
+            file_metadata = drive_service.files().get(
                 fileId=file_id, fields="name,mimeType"
             ).execute()
             
@@ -153,11 +194,15 @@ class TextExtractorNode:
     """Extract text from various file formats"""
     
     def __init__(self):
-        self.drive_service = FileProcessorNode()._get_drive_service()
+        self.file_processor = FileProcessorNode()
     
     def _download_file(self, file_id: str) -> bytes:
         """Download file from Google Drive"""
-        request = self.drive_service.files().get_media(fileId=file_id)
+        drive_service = self.file_processor._get_drive_service()
+        if drive_service is None:
+            raise Exception("Google Drive service not available")
+            
+        request = drive_service.files().get_media(fileId=file_id)
         file = io.BytesIO()
         downloader = MediaIoBaseDownload(file, request)
         done = False
@@ -194,6 +239,20 @@ class TextExtractorNode:
             return state
         
         try:
+            # If we already have resume text, skip text extraction
+            if state.get("resume_text"):
+                return {
+                    **state,
+                    "error": None
+                }
+            
+            # If no file ID, we can't extract text
+            if not state.get("file_id"):
+                return {
+                    **state,
+                    "error": "No file ID available for text extraction"
+                }
+            
             file_content = self._download_file(state["file_id"])
             file_type = state["file_type"]
             

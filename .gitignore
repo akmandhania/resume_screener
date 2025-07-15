@@ -166,12 +166,16 @@ cython_debug/
 
 # Project-specific files
 credentials.json
+resume_screener.log
 *.csv
 !example_job_urls.csv
 !test_*.csv
 debug_*.html
 debug_*.py
-test_*.py
+# Keep main test file but exclude debug tests
+test_*_debug.py
+test_*_fix.py
+test_*_improved.py
 batch_screening_results.csv
 corrected_jobinput.csv
 Resume_Screening.json

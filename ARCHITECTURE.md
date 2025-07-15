@@ -208,35 +208,20 @@ sequenceDiagram
 
 ### 1. User Interface Components
 
-#### Simple Gradio App (`simple_gladio_app.py`)
+#### Unified Gradio App (`unified_resume_screener.py`)
 - **Port**: 7860
 - **Features**: 
-  - Direct file upload (PDF/DOCX/TXT)
-  - Public Google Drive links
-  - Job URL scraping
-  - Manual job description input
-  - Real-time results display
-  - Spreadsheet export preview
-
-#### Batch Gradio App (`batch_gladio_app.py`)
-- **Port**: 7861
-- **Features**:
-  - Single resume upload
-  - CSV template download
-  - Batch job URL processing
-  - Progress tracking
-  - CSV results export
-
-#### Full Gradio App (`gladio_app.py`)
-- **Port**: 7860
-- **Features**:
-  - Google Cloud integration
-  - Private Google Drive access
-  - Advanced authentication
+  - Matrix processing (multiple resumes vs multiple jobs)
+  - Multiple input methods (file upload, text paste, Google Drive, CSV links)
+  - PDF text extraction with PyPDF2
+  - Job URL scraping with enhanced cleaning
+  - Real-time results display with progressive updates
+  - Comprehensive CSV export
+  - Professional UI with expandable details
 
 ### 2. Core Processing Components
 
-#### LangGraph Workflow (`simple_resume_screener.py`)
+#### LangGraph Workflow (`resume_screener.py`)
 ```python
 class ResumeScreeningState(TypedDict):
     # Input
@@ -341,11 +326,8 @@ uv sync
 # Set environment variables
 echo "OPENAI_API_KEY=your-key" > .env
 
-# Run simple interface
-uv run python simple_gladio_app.py
-
-# Run batch interface
-uv run python batch_gladio_app.py
+# Run unified interface
+uv run python unified_resume_screener.py
 ```
 
 ### Production Considerations

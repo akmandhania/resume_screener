@@ -182,7 +182,7 @@ def create_uv_scripts():
     
     # Create scripts for common tasks
     scripts = {
-        "dev": "uv run python gladio_app.py",
+        "dev": "uv run python unified_resume_screener.py",
         "test": "uv run python test_system.py",
         "format": "uv run black .",
         "lint": "uv run flake8 .",
@@ -246,10 +246,10 @@ def main():
     print("1. Edit .env file with your API keys")
     print("2. Download Google credentials.json")
     print("3. Run: uv run python test_system.py")
-    print("4. Run: uv run python gladio_app.py")
+    print("4. Run: uv run python unified_resume_screener.py")
     
     print("\n🚀 Quick Commands:")
-    print("  uv run python gladio_app.py    # Start the web interface")
+    print("  uv run python unified_resume_screener.py    # Start the web interface")
     print("  uv run python test_system.py   # Run system tests")
     print("  uv run black .                 # Format code")
     print("  uv run flake8 .                # Lint code")

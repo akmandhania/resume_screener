@@ -41,7 +41,7 @@ install-test:
 # Development commands
 run:
 	@echo "🌐 Starting web interface..."
-	uv run python gladio_app.py
+	uv run python unified_resume_screener.py
 
 test:
 	@echo "🧪 Running system tests..."
