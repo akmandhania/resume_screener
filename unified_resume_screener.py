@@ -59,14 +59,21 @@ Responsibilities:
         resumes = []
         
         if resume_input_type == "upload_file":
-            if resume_file:
-                # For now, we'll store the file info - actual processing happens later
-                resumes.append({
-                    "type": "file",
-                    "content": resume_file.name,
-                    "name": resume_file.name,
-                    "source": "uploaded_file"
-                })
+            if resume_file and hasattr(resume_file, 'name') and resume_file.name:
+                # Extract file content
+                try:
+                    with open(resume_file.name, 'r', encoding='utf-8', errors='ignore') as f:
+                        file_content = f.read()
+                    resumes.append({
+                        "type": "file",
+                        "content": file_content,
+                        "name": resume_file.name,
+                        "source": "uploaded_file"
+                    })
+                except Exception as e:
+                    raise gr.Error(f"Error reading resume file: {str(e)}")
+            else:
+                raise gr.Error("Please upload a resume file")
         
         elif resume_input_type == "paste_text":
             if resume_text.strip():
@@ -87,7 +94,7 @@ Responsibilities:
                 })
         
         elif resume_input_type == "csv_links":
-            if resume_csv:
+            if resume_csv and hasattr(resume_csv, 'name') and resume_csv.name:
                 try:
                     # Read CSV and extract links
                     df = pd.read_csv(resume_csv.name)
@@ -112,14 +119,21 @@ Responsibilities:
         job_descriptions = []
         
         if jd_input_type == "upload_file":
-            if jd_file:
-                # For now, we'll store the file info - actual processing happens later
-                job_descriptions.append({
-                    "type": "file",
-                    "content": jd_file.name,
-                    "name": jd_file.name,
-                    "source": "uploaded_file"
-                })
+            if jd_file and hasattr(jd_file, 'name') and jd_file.name:
+                # Extract file content
+                try:
+                    with open(jd_file.name, 'r', encoding='utf-8', errors='ignore') as f:
+                        file_content = f.read()
+                    job_descriptions.append({
+                        "type": "file",
+                        "content": file_content,
+                        "name": jd_file.name,
+                        "source": "uploaded_file"
+                    })
+                except Exception as e:
+                    raise gr.Error(f"Error reading job description file: {str(e)}")
+            else:
+                raise gr.Error("Please upload a job description file")
         
         elif jd_input_type == "paste_text":
             if jd_text.strip():
@@ -140,7 +154,7 @@ Responsibilities:
                 })
         
         elif jd_input_type == "csv_links":
-            if jd_csv:
+            if jd_csv and hasattr(jd_csv, 'name') and jd_csv.name:
                 try:
                     # Read CSV and extract links
                     df = pd.read_csv(jd_csv.name)
@@ -192,14 +206,19 @@ Responsibilities:
                 # For now, we'll use a placeholder - this needs enhancement
                 google_drive_link = ""
                 resume_text = resume["content"]
+            elif resume["type"] == "file":
+                # For file uploads, use the extracted content
+                google_drive_link = ""
+                resume_text = resume["content"]
             else:
-                # For file uploads, we'll need to handle differently
                 google_drive_link = ""
                 resume_text = ""
             
             if job_desc["type"] == "link":
                 job_description_text = self.scrape_job_description(job_desc["content"])
             elif job_desc["type"] == "text":
+                job_description_text = job_desc["content"]
+            elif job_desc["type"] == "file":
                 job_description_text = job_desc["content"]
             else:
                 job_description_text = self.sample_job_description  # Placeholder
@@ -263,7 +282,7 @@ Responsibilities:
     
     def process_matrix(self, resume_input_type: str, jd_input_type: str, 
                       resume_file=None, resume_text="", resume_link="", resume_csv=None,
-                      jd_file=None, jd_text="", jd_link="", jd_csv=None) -> Tuple[str, str]:
+                      jd_file=None, jd_text="", jd_link="", jd_csv=None) -> Tuple[str, str, str]:
         """Process the matrix of resumes against job descriptions"""
         try:
             # Extract resumes and job descriptions
@@ -285,16 +304,19 @@ Responsibilities:
                     result = self.process_single_resume_jd_pair(resume, job_desc)
                     results.append(result)
                     processed += 1
-                    
-                    # Update progress (you can add a progress callback here)
                     print(f"Processed {processed}/{total_combinations}")
             
             # Generate results table and CSV
             table_html = self.create_results_table(results)
             csv_data = self.create_csv_export(results)
             
-            return table_html, csv_data
+            # Write CSV to a temporary file for download
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+            tmp.write(csv_data.encode("utf-8"))
+            tmp.close()
+            csv_path = tmp.name
             
+            return table_html, csv_data, csv_path
         except Exception as e:
             error_html = f"""
             <div style="color: red; padding: 20px; border: 1px solid red; border-radius: 5px;">
@@ -302,7 +324,7 @@ Responsibilities:
                 <p>{str(e)}</p>
             </div>
             """
-            return error_html, ""
+            return error_html, "", ""
     
     def create_results_table(self, results: List[Dict[str, Any]]) -> str:
         """Create HTML table for results display"""
@@ -471,34 +493,30 @@ def create_interface():
                 )
                 
                 # Resume input widgets (initially hidden)
-                with gr.Group(visible=True) as resume_upload_group:
-                    resume_file = gr.File(
-                        label="Upload Resume File",
-                        file_types=[".pdf", ".docx", ".txt"],
-                        file_count="single"
-                    )
-                
-                with gr.Group(visible=False) as resume_text_group:
-                    resume_text = gr.Textbox(
-                        label="Paste Resume Text",
-                        placeholder="Paste your resume text here...",
-                        lines=10
-                    )
-                
-                with gr.Group(visible=False) as resume_link_group:
-                    resume_link = gr.Textbox(
-                        label="Google Drive Link",
-                        placeholder="https://drive.google.com/file/d/...",
-                        info="Paste a Google Drive link to your resume"
-                    )
-                
-                with gr.Group(visible=False) as resume_csv_group:
-                    resume_csv = gr.File(
-                        label="Upload CSV with Resume Links",
-                        file_types=[".csv"],
-                        file_count="single",
-                        info="CSV file with one column containing resume links"
-                    )
+                resume_file = gr.File(
+                    label="Upload Resume File",
+                    file_types=[".pdf", ".docx", ".txt"],
+                    file_count="single",
+                    visible=True
+                )
+                resume_text = gr.Textbox(
+                    label="Paste Resume Text",
+                    placeholder="Paste your resume text here...",
+                    lines=10,
+                    visible=False
+                )
+                resume_link = gr.Textbox(
+                    label="Google Drive Link",
+                    placeholder="https://drive.google.com/file/d/...",
+                    visible=False
+                )
+                resume_csv = gr.File(
+                    label="Upload CSV with Resume Links",
+                    file_types=[".csv"],
+                    file_count="single",
+                    visible=False
+                )
+                gr.Markdown("*CSV file with one column containing resume links*", visible=False)
             
             with gr.Column():
                 gr.Markdown("### 💼 Job Description Input")
@@ -512,35 +530,31 @@ def create_interface():
                 )
                 
                 # Job description input widgets (initially hidden)
-                with gr.Group(visible=False) as jd_upload_group:
-                    jd_file = gr.File(
-                        label="Upload Job Description File",
-                        file_types=[".pdf", ".docx", ".txt"],
-                        file_count="single"
-                    )
-                
-                with gr.Group(visible=True) as jd_text_group:
-                    jd_text = gr.Textbox(
-                        label="Paste Job Description",
-                        placeholder="Paste job description here...",
-                        lines=10,
-                        value=screener.sample_job_description
-                    )
-                
-                with gr.Group(visible=False) as jd_link_group:
-                    jd_link = gr.Textbox(
-                        label="Job Description URL",
-                        placeholder="https://...",
-                        info="URL to job posting or description"
-                    )
-                
-                with gr.Group(visible=False) as jd_csv_group:
-                    jd_csv = gr.File(
-                        label="Upload CSV with Job Description Links",
-                        file_types=[".csv"],
-                        file_count="single",
-                        info="CSV file with one column containing job description links"
-                    )
+                jd_file = gr.File(
+                    label="Upload Job Description File",
+                    file_types=[".pdf", ".docx", ".txt"],
+                    file_count="single",
+                    visible=False
+                )
+                jd_text = gr.Textbox(
+                    label="Paste Job Description",
+                    placeholder="Paste job description here...",
+                    lines=10,
+                    value=screener.sample_job_description,
+                    visible=True
+                )
+                jd_link = gr.Textbox(
+                    label="Job Description URL",
+                    placeholder="https://...",
+                    visible=False
+                )
+                jd_csv = gr.File(
+                    label="Upload CSV with Job Description Links",
+                    file_types=[".csv"],
+                    file_count="single",
+                    visible=False
+                )
+                gr.Markdown("*CSV file with one column containing job description links*", visible=False)
         
         # Instructions (collapsible)
         with gr.Accordion("📖 Instructions", open=False):
@@ -576,51 +590,47 @@ def create_interface():
         # Download button
         download_btn = gr.DownloadButton(
             label="📥 Download Results as CSV",
-            value="",
             visible=False
         )
         
         # Event handlers for radio button changes
         def update_resume_widgets(choice):
             return {
-                resume_upload_group: choice == "upload_file",
-                resume_text_group: choice == "paste_text",
-                resume_link_group: choice == "google_drive",
-                resume_csv_group: choice == "csv_links"
+                resume_file: choice == "upload_file",
+                resume_text: choice == "paste_text",
+                resume_link: choice == "google_drive",
+                resume_csv: choice == "csv_links"
             }
         
         def update_jd_widgets(choice):
             return {
-                jd_upload_group: choice == "upload_file",
-                jd_text_group: choice == "paste_text",
-                jd_link_group: choice == "link",
-                jd_csv_group: choice == "csv_links"
+                jd_file: choice == "upload_file",
+                jd_text: choice == "paste_text",
+                jd_link: choice == "link",
+                jd_csv: choice == "csv_links"
             }
         
         resume_input_type.change(
             fn=update_resume_widgets,
             inputs=[resume_input_type],
-            outputs=[resume_upload_group, resume_text_group, resume_link_group, resume_csv_group]
+            outputs=[resume_file, resume_text, resume_link, resume_csv]
         )
         
         jd_input_type.change(
             fn=update_jd_widgets,
             inputs=[jd_input_type],
-            outputs=[jd_upload_group, jd_text_group, jd_link_group, jd_csv_group]
+            outputs=[jd_file, jd_text, jd_link, jd_csv]
         )
         
         # Process button handler
         def process_and_display(resume_input_type, resume_file, resume_text, resume_link, resume_csv,
                                jd_input_type, jd_file, jd_text, jd_link, jd_csv):
-            table_html, csv_data = screener.process_matrix(
+            table_html, csv_data, csv_path = screener.process_matrix(
                 resume_input_type, jd_input_type, resume_file, resume_text, resume_link, resume_csv,
                 jd_file, jd_text, jd_link, jd_csv
             )
-            
-            # Create downloadable file
-            if csv_data:
-                csv_filename = "resume_screening_results.csv"
-                return table_html, csv_data, gr.DownloadButton(visible=True, value=(csv_filename, csv_data))
+            if csv_path:
+                return table_html, csv_data, gr.DownloadButton(visible=True, value=csv_path)
             else:
                 return table_html, "", gr.DownloadButton(visible=False)
         
