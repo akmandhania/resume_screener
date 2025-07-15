@@ -1,0 +1,13 @@
+# OpenAI API Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Google API Configuration
+# You'll need to set up Google Cloud Project and enable APIs:
+# - Google Drive API
+# - Google Sheets API
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+
+# Optional: Google Sheets Configuration
+# If you want to automatically export to Google Sheets
+GOOGLE_SHEETS_ID=your_google_sheets_id_here 
