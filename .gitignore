@@ -180,6 +180,20 @@ batch_screening_results.csv
 corrected_jobinput.csv
 Resume_Screening.json
 
+# Temporary files created during processing
+resume_results_*.csv
+temp_*.csv
+
+# Personal resume files (keep directory structure)
+resumes/*.pdf
+resumes/*.docx
+resumes/*.txt
+!resumes/.gitkeep
+
+# Test output files
+test_output_*.csv
+test_results_*.json
+
 # OS-specific files
 .DS_Store
 .DS_Store?

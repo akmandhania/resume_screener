@@ -1,6 +1,6 @@
 # Unified Resume Screening System
 
-A modern, AI-powered resume screening system with matrix processing capabilities. Screen multiple resumes against multiple job descriptions with a single, unified interface.
+A modern, AI-powered resume screening system with matrix processing capabilities. Screen multiple resumes against multiple job descriptions with a single, unified interface. Features enhanced job title extraction, comprehensive CSV exports with job URLs, and a professional web interface.
 
 ## 🚀 Features
 
@@ -12,7 +12,9 @@ A modern, AI-powered resume screening system with matrix processing capabilities
 - **Job Description Scraping**: Automatically extract job descriptions from URLs
 - **Professional UI**: Clean, modern interface with collapsible instructions
 - **Comprehensive Results**: Detailed analysis with strengths, weaknesses, risk/reward assessment
-- **CSV Export**: Download complete results for further analysis
+- **CSV Export**: Download complete results with job URLs for easy identification
+- **Enhanced Job Title Extraction**: Automatically extracts actual job titles from job postings
+- **Professional Download Interface**: Clean, clickable download buttons with proper filenames
 - **LangGraph Workflow**: State-based processing with clear data flow
 - **Modern Package Management**: Uses `uv` for fast dependency resolution
 
@@ -161,10 +163,12 @@ The system supports these Google Drive link formats:
 ### CSV Export
 
 The system automatically generates a comprehensive CSV export with the following columns:
-- Resume Name, Resume Source, Job Description Name, Job Description Source
+- Resume Name, Resume Source, Job Description Name, Job Description Source, **Job Description URL**
 - Candidate First Name, Last Name, Email
 - Overall Fit Rating, Risk Score, Reward Score
 - Strengths, Weaknesses, Risk Explanation, Reward Explanation, Justification
+
+**New Feature**: The CSV now includes the actual job posting URL, making it easy to identify which specific job each result corresponds to when processing multiple job descriptions.
 
 ### Example CSV Input Format
 
@@ -181,6 +185,24 @@ https://www.glassdoor.com/job-listing/example3
 4. **Process**: Click "Start Batch Screening" to analyze all jobs
 
 5. **Review Results**: View summary and download detailed CSV for Google Sheets
+
+## 🆕 Recent Improvements
+
+### Enhanced Job Title Extraction
+- **Smart Title Detection**: Automatically extracts actual job titles from job postings
+- **Multiple Extraction Methods**: Uses HTML title tags, meta descriptions, and text pattern matching
+- **Fallback Handling**: Gracefully handles cases where job titles can't be extracted
+- **Better Identification**: Instead of "JD: linkedin.com - jobs", you now see "JD: Senior Software Engineer"
+
+### Improved Download Experience
+- **Clickable Download Buttons**: Professional download interface that's fully functional
+- **Consistent Filenames**: Download button shows the same filename as the actual downloaded file
+- **Proper File Handling**: Uses Gradio's DownloadButton for reliable file downloads
+
+### Enhanced CSV Exports
+- **Job URL Tracking**: CSV exports now include the actual job posting URL
+- **Easy Identification**: Quickly identify which specific job each result corresponds to
+- **Complete Data**: All necessary information for further analysis in Excel or Google Sheets
 
 ## 🔍 Analysis Output
 

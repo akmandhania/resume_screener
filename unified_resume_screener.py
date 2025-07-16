@@ -9,6 +9,7 @@ import csv
 import io
 import re
 import logging
+import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
 import tempfile
@@ -91,6 +92,276 @@ class UnifiedResumeScreener:
             logger.error(f"PDF extraction error: {str(e)}")
             return f"Error extracting PDF text: {str(e)}"
     
+    def _is_direct_text(self, link_str: str) -> bool:
+        """Check if the link is direct text content (not a file path or URL)"""
+        return not link_str.startswith("http") and not os.path.exists(link_str)
+    
+    def _is_local_file(self, link_str: str) -> bool:
+        """Check if the link is a local file path"""
+        return os.path.exists(link_str) and os.path.isfile(link_str)
+    
+    def _is_google_doc(self, link_str: str) -> bool:
+        """Check if the link is a Google Doc URL"""
+        return link_str.startswith("http") and '/document/d/' in link_str
+    
+    def _is_url(self, link_str: str) -> bool:
+        """Check if the link is a URL"""
+        return link_str.startswith("http")
+    
+    def _read_local_file(self, file_path: str) -> str:
+        """Read content from a local file, handling PDFs and text files"""
+        try:
+            if file_path.lower().endswith('.pdf'):
+                # Read PDF as binary and extract text
+                with open(file_path, 'rb') as f:
+                    pdf_content = f.read()
+                return self.extract_pdf_text(pdf_content.decode('latin-1'))
+            else:
+                # Read as text file
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    return f.read()
+        except Exception as e:
+            raise Exception(f"Error reading file {file_path}: {str(e)}")
+    
+    def _create_result_dict(self, content: str, name: str, source: str, item_type: str = "text", original_url: str = None) -> Dict[str, str]:
+        """Create a standardized result dictionary"""
+        result = {
+            "type": item_type,
+            "content": content,
+            "name": name,
+            "source": source
+        }
+        if original_url:
+            result["original_url"] = original_url
+        return result
+    
+    def _create_error_result(self, error_msg: str, name: str) -> Dict[str, str]:
+        """Create a standardized error result dictionary"""
+        return self._create_result_dict(error_msg, name, "error")
+    
+    def process_resume_link(self, link: str, index: int = None) -> Dict[str, str]:
+        """
+        Unified resume link processing function that handles any type of link or content.
+        
+        Hierarchy (from fastest to slowest):
+        1. Direct text content (ready to process)
+        2. Local file path (quick file read)
+        3. Google Doc link (PDF download)
+        4. Other URLs (future: Google Drive, etc.)
+        
+        Args:
+            link: The link or content to process
+            index: Optional index for CSV items
+            
+        Returns:
+            Dict with processed content and metadata
+        """
+        link_str = str(link).strip()
+        
+        # Skip empty or whitespace-only entries
+        if not link_str:
+            return None
+        
+        # Create name prefix for this resume
+        name_prefix = f"Resume {index + 1 if index is not None else ''}"
+        
+        # 1. Direct text content (fastest - no processing needed)
+        if self._is_direct_text(link_str):
+            logger.info(f"Processing direct text content: {link_str[:50]}...")
+            return self._create_result_dict(
+                link_str,
+                f"{name_prefix} (Text)".strip(),
+                "direct_text"
+            )
+        
+        # 2. Local file path (quick file read)
+        if self._is_local_file(link_str):
+            try:
+                logger.info(f"Processing local file: {link_str}")
+                content = self._read_local_file(link_str)
+                # Extract the actual filename for better identification
+                actual_filename = os.path.basename(link_str)
+                file_type = "(PDF)" if link_str.lower().endswith('.pdf') else "(File)"
+                display_name = f"{actual_filename} {file_type}"
+                return self._create_result_dict(
+                    content,
+                    display_name,
+                    "local_file"
+                )
+            except Exception as e:
+                logger.error(f"Failed to read local file {link_str}: {str(e)}")
+                return self._create_error_result(
+                    f"Error reading file {link_str}: {str(e)}",
+                    f"{name_prefix} (Error)".strip()
+                )
+        
+        # 3. Google Doc link (PDF download)
+        if self._is_google_doc(link_str):
+            doc_id_match = re.search(r'/document/d/([a-zA-Z0-9-_]+)', link_str)
+            doc_id = doc_id_match.group(1) if doc_id_match else "unknown"
+            display_name = f"Google Doc ({doc_id[:8]}...)"
+            try:
+                logger.info(f"Processing Google Doc: {link_str}")
+                content = self.download_google_doc_as_pdf(link_str)
+                return self._create_result_dict(
+                    content,
+                    display_name,
+                    "google_doc"
+                )
+            except Exception as e:
+                logger.error(f"Failed to process Google Doc {link_str}: {str(e)}")
+                # Always use the descriptive name, even on error
+                return self._create_result_dict(
+                    link_str,
+                    display_name,
+                    "google_drive",
+                    "google_drive"
+                )
+        
+        # 4. Other URLs (future: Google Drive, etc.)
+        if self._is_url(link_str):
+            logger.info(f"Processing URL: {link_str}")
+            # Extract domain for better identification
+            try:
+                from urllib.parse import urlparse
+                parsed_url = urlparse(link_str)
+                domain = parsed_url.netloc.replace('www.', '')
+                display_name = f"URL ({domain})"
+            except:
+                display_name = f"{name_prefix} (URL)".strip()
+            return self._create_result_dict(
+                link_str,
+                display_name,
+                "url",
+                "google_drive"  # Default for now, can be enhanced later
+            )
+        
+        # Fallback: treat as text content
+        logger.warning(f"Unknown format, treating as text: {link_str}")
+        return self._create_result_dict(
+            link_str,
+            f"{name_prefix} (Unknown)".strip(),
+            "unknown"
+        )
+
+    def process_job_description_link(self, link: str, index: int = None) -> Dict[str, str]:
+        """
+        Unified job description link processing function.
+        
+        Hierarchy (from fastest to slowest):
+        1. Direct text content (ready to process)
+        2. Local file path (quick file read)
+        3. URLs (web scraping required)
+        
+        Args:
+            link: The link or content to process
+            index: Optional index for CSV items
+            
+        Returns:
+            Dict with processed content and metadata
+        """
+        link_str = str(link).strip()
+        
+        # Skip empty or whitespace-only entries
+        if not link_str:
+            return None
+        
+        # Create name prefix for this job description
+        name_prefix = f"Job Description {index + 1 if index is not None else ''}"
+        
+        # 1. Direct text content (fastest - no processing needed)
+        if self._is_direct_text(link_str):
+            logger.info(f"Processing direct job description text: {link_str[:50]}...")
+            # Try to extract a meaningful title from the text
+            lines = link_str.split('\n')
+            first_line = lines[0].strip() if lines else "Job Description"
+            # Limit length and clean up
+            title = first_line[:50] + "..." if len(first_line) > 50 else first_line
+            display_name = f"JD: {title}"
+            return self._create_result_dict(
+                link_str,
+                display_name,
+                "direct_text"
+            )
+        
+        # 2. Local file path (quick file read)
+        if self._is_local_file(link_str):
+            try:
+                logger.info(f"Processing local job description file: {link_str}")
+                content = self._read_local_file(link_str)
+                # Extract the actual filename for better identification
+                actual_filename = os.path.basename(link_str)
+                file_type = "(PDF)" if link_str.lower().endswith('.pdf') else "(File)"
+                display_name = f"JD: {actual_filename} {file_type}"
+                return self._create_result_dict(
+                    content,
+                    display_name,
+                    "local_file"
+                )
+            except Exception as e:
+                logger.error(f"Failed to read local job description file {link_str}: {str(e)}")
+                return self._create_error_result(
+                    f"Error reading file {link_str}: {str(e)}",
+                    f"{name_prefix} (Error)".strip()
+                )
+        
+        # 3. URLs (web scraping required)
+        if self._is_url(link_str):
+            # Extract domain and try to get meaningful info from URL
+            try:
+                from urllib.parse import urlparse
+                parsed_url = urlparse(link_str)
+                domain = parsed_url.netloc.replace('www.', '')
+                
+                # Try to extract job title from URL path
+                path_parts = parsed_url.path.split('/')
+                job_indicators = [part for part in path_parts if any(keyword in part.lower() for keyword in ['job', 'position', 'career', 'role'])]
+                
+                if job_indicators:
+                    display_name = f"JD: {domain} - {job_indicators[0]}"
+                else:
+                    display_name = f"JD: {domain}"
+            except:
+                display_name = f"{name_prefix} (Scraped)".strip()
+            
+            try:
+                logger.info(f"Scraping job description from URL: {link_str}")
+                content, job_title = self.scrape_job_description(link_str)
+                
+                # Use extracted job title if available, otherwise fall back to domain-based name
+                if job_title:
+                    display_name = f"JD: {job_title}"
+                else:
+                    # Fallback to domain-based name
+                    try:
+                        from urllib.parse import urlparse
+                        parsed_url = urlparse(link_str)
+                        domain = parsed_url.netloc.replace('www.', '')
+                        display_name = f"JD: {domain}"
+                    except:
+                        display_name = f"{name_prefix} (Scraped)".strip()
+                
+                return self._create_result_dict(
+                    content,
+                    display_name,
+                    "scraped_url",
+                    original_url=link_str
+                )
+            except Exception as e:
+                logger.error(f"Failed to scrape job description from {link_str}: {str(e)}")
+                return self._create_error_result(
+                    f"Error scraping URL {link_str}: {str(e)}",
+                    display_name
+                )
+        
+        # Fallback: treat as text content
+        logger.warning(f"Unknown job description format, treating as text: {link_str}")
+        return self._create_result_dict(
+            link_str,
+            f"{name_prefix} (Unknown)".strip(),
+            "unknown"
+        )
+
     def extract_resumes(self, resume_input_type: str, resume_file=None, resume_text="", 
                        resume_link="", resume_csv=None) -> List[Dict[str, str]]:
         """Extract resumes based on input type"""
@@ -142,51 +413,10 @@ class UnifiedResumeScreener:
         
         elif resume_input_type == "google_drive":
             if resume_link.strip():
-                # Try to download Google Doc as PDF first (no credentials needed)
-                if '/document/d/' in resume_link:
-                    try:
-                        logger.info(f"Attempting to download Google Doc as PDF: {resume_link}")
-                        extracted_text = self.download_google_doc_as_pdf(resume_link)
-                        resumes.append({
-                            "type": "text",
-                            "content": extracted_text,
-                            "name": f"Google Doc: {resume_link}",
-                            "source": "google_doc_pdf"
-                        })
-                        logger.info(f"Successfully extracted Google Doc text: {len(extracted_text)} characters")
-                    except Exception as e:
-                        logger.error(f"Google Doc PDF download failed: {str(e)}")
-                        # Fall back to API method if credentials exist
-                        if os.path.exists('credentials.json'):
-                            resumes.append({
-                                "type": "google_drive",
-                                "content": resume_link,
-                                "name": f"Google Drive: {resume_link}",
-                                "source": "google_drive"
-                            })
-                        else:
-                            raise gr.Error(
-                                f"Could not access Google Doc: {str(e)}\n\n"
-                                "Please either:\n"
-                                "1. Make sure the Google Doc is shared with 'Anyone with the link can view'\n"
-                                "2. Upload the file directly using 'Upload File' option\n"
-                                "3. Copy and paste the content using 'Paste Text' option"
-                            )
-                else:
-                    # For other Google Drive files, check if credentials exist
-                    if not os.path.exists('credentials.json'):
-                        raise gr.Error(
-                            "Google Drive API credentials not found. Please either:\n"
-                            "1. Upload the file directly using 'Upload File' option\n"
-                            "2. Copy and paste the content using 'Paste Text' option\n"
-                            "3. Set up Google Drive API credentials (see README.md for instructions)"
-                        )
-                    resumes.append({
-                        "type": "google_drive",
-                        "content": resume_link,
-                        "name": f"Google Drive: {resume_link}",
-                        "source": "google_drive"
-                    })
+                # Use unified resume link processing
+                processed = self.process_resume_link(resume_link)
+                if processed:
+                    resumes.append(processed)
         
         elif resume_input_type == "csv_links":
             if resume_csv and hasattr(resume_csv, 'name') and resume_csv.name:
@@ -197,12 +427,10 @@ class UnifiedResumeScreener:
                     link_column = df.columns[0]
                     for idx, link in enumerate(df[link_column]):
                         if pd.notna(link) and str(link).strip():
-                            resumes.append({
-                                "type": "google_drive",
-                                "content": str(link).strip(),
-                                "name": f"CSV Resume {idx + 1}",
-                                "source": "csv_links"
-                            })
+                            # Use unified resume link processing
+                            processed = self.process_resume_link(link, idx)
+                            if processed:
+                                resumes.append(processed)
                 except Exception as e:
                     raise gr.Error(f"Error reading CSV file: {str(e)}")
         
@@ -243,12 +471,10 @@ class UnifiedResumeScreener:
         
         elif jd_input_type == "link":
             if jd_link.strip():
-                job_descriptions.append({
-                    "type": "link",
-                    "content": jd_link,
-                    "name": f"Job Description: {jd_link}",
-                    "source": "link"
-                })
+                # Use unified job description link processing
+                processed = self.process_job_description_link(jd_link)
+                if processed:
+                    job_descriptions.append(processed)
         
         elif jd_input_type == "csv_links":
             if jd_csv and hasattr(jd_csv, 'name') and jd_csv.name:
@@ -259,19 +485,10 @@ class UnifiedResumeScreener:
                     link_column = df.columns[0]
                     for idx, link in enumerate(df[link_column]):
                         if pd.notna(link) and str(link).strip():
-                            link_str = str(link).strip()
-                            if link_str.startswith("http://") or link_str.startswith("https://"):
-                                job_descriptions.append({
-                                    "type": "link",
-                                    "content": link_str,
-                                    "name": f"CSV JD {idx + 1}",
-                                    "source": "csv_links"
-                                })
-                                logger.info(f"Added JD link from CSV: {link_str}")
-                            else:
-                                logger.warning(f"Skipped malformed JD link in CSV: {link_str}")
-                        else:
-                            logger.warning(f"Skipped empty JD link in CSV at row {idx+1}")
+                            # Use unified job description link processing
+                            processed = self.process_job_description_link(link, idx)
+                            if processed:
+                                job_descriptions.append(processed)
                 except Exception as e:
                     raise gr.Error(f"Error reading CSV file: {str(e)}")
         
@@ -313,8 +530,8 @@ class UnifiedResumeScreener:
         except Exception as e:
             raise gr.Error(f"Error downloading Google Doc: {str(e)}")
     
-    def scrape_job_description(self, url: str) -> str:
-        """Scrape job description from URL"""
+    def scrape_job_description(self, url: str) -> tuple[str, str]:
+        """Scrape job description from URL and extract job title"""
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -324,6 +541,9 @@ class UnifiedResumeScreener:
             
             # Enhanced text extraction with better cleaning
             text = response.text
+            
+            # Try to extract job title from HTML title or meta tags first
+            job_title = self._extract_job_title_from_html(response.text)
             
             # Remove JavaScript completely
             text = re.sub(r'<script[^>]*>.*?</script>', ' ', text, flags=re.DOTALL)
@@ -359,6 +579,10 @@ class UnifiedResumeScreener:
             text = re.sub(r'[^\w\s\.\,\-\!\?\:\;\(\)\[\]\@\#]', ' ', text)  # Keep readable characters
             text = text.strip()
             
+            # If we didn't get a job title from HTML, try to extract it from the text content
+            if not job_title:
+                job_title = self._extract_job_title_from_text(text)
+            
             # Extract meaningful content (look for job-related keywords)
             lines = text.split('.')
             meaningful_lines = []
@@ -375,10 +599,73 @@ class UnifiedResumeScreener:
                 # Fallback: take first 1000 characters that look like text
                 text = text[:1000]
             
-            return text[:3000]  # Limit to first 3000 characters
+            return text[:3000], job_title  # Return both text and job title
             
         except Exception as e:
             raise gr.Error(f"Error scraping job description: {str(e)}")
+    
+    def _extract_job_title_from_html(self, html_content: str) -> str:
+        """Extract job title from HTML title and meta tags"""
+        try:
+            # Look for title tag
+            title_match = re.search(r'<title[^>]*>(.*?)</title>', html_content, re.IGNORECASE | re.DOTALL)
+            if title_match:
+                title = title_match.group(1).strip()
+                # Clean up common LinkedIn title patterns
+                title = re.sub(r'\s*-\s*LinkedIn', '', title, flags=re.IGNORECASE)
+                title = re.sub(r'\s*-\s*Jobs', '', title, flags=re.IGNORECASE)
+                title = re.sub(r'\s*-\s*Job Search', '', title, flags=re.IGNORECASE)
+                if title and len(title) > 5:
+                    return title[:100]  # Limit length
+            
+            # Look for meta description
+            meta_match = re.search(r'<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"\']*)["\']', html_content, re.IGNORECASE)
+            if meta_match:
+                description = meta_match.group(1).strip()
+                # Look for job title patterns in description
+                job_patterns = [
+                    r'(?:hiring|seeking|looking for)\s+([^.!?]+)',
+                    r'(?:position|role|job)\s+(?:of|as)\s+([^.!?]+)',
+                    r'([^.!?]*\s+(?:Engineer|Developer|Manager|Analyst|Specialist|Coordinator|Director|Lead|Senior|Junior)[^.!?]*)'
+                ]
+                for pattern in job_patterns:
+                    match = re.search(pattern, description, re.IGNORECASE)
+                    if match:
+                        return match.group(1).strip()[:100]
+            
+            return ""
+        except:
+            return ""
+    
+    def _extract_job_title_from_text(self, text: str) -> str:
+        """Extract job title from text content"""
+        try:
+            # Look for common job title patterns in the first few lines
+            lines = text.split('\n')[:10]  # Check first 10 lines
+            
+            for line in lines:
+                line = line.strip()
+                if len(line) < 10 or len(line) > 200:  # Skip very short or very long lines
+                    continue
+                
+                # Look for job title indicators
+                job_indicators = [
+                    r'(?:hiring|seeking|looking for)\s+([^.!?]+)',
+                    r'(?:position|role|job)\s+(?:of|as)\s+([^.!?]+)',
+                    r'([^.!?]*\s+(?:Engineer|Developer|Manager|Analyst|Specialist|Coordinator|Director|Lead|Senior|Junior|Architect|Consultant|Advisor)[^.!?]*)',
+                    r'([^.!?]*\s+(?:Software|Data|Product|Project|Business|Marketing|Sales|HR|Finance|Operations)[^.!?]*)'
+                ]
+                
+                for pattern in job_indicators:
+                    match = re.search(pattern, line, re.IGNORECASE)
+                    if match:
+                        title = match.group(1).strip()
+                        if len(title) > 5 and len(title) < 100:
+                            return title
+            
+            return ""
+        except:
+            return ""
     
     def process_single_resume_jd_pair(self, resume: Dict[str, str], job_desc: Dict[str, str]) -> Dict[str, Any]:
         """Process a single resume against a single job description"""
@@ -400,12 +687,8 @@ class UnifiedResumeScreener:
                 google_drive_link = ""
                 resume_text = ""
             
-            if job_desc["type"] == "link":
-                logger.info(f"Scraping job description from link: {job_desc['content']}")
-                job_description_text = self.scrape_job_description(job_desc["content"])
-            elif job_desc["type"] == "text":
-                job_description_text = job_desc["content"]
-            elif job_desc["type"] == "file":
+            # All job descriptions are now processed to have type "text"
+            if job_desc["type"] == "text":
                 job_description_text = job_desc["content"]
             else:
                 raise ValueError(f"Unknown job description type: {job_desc['type']}")
@@ -428,12 +711,13 @@ class UnifiedResumeScreener:
             result = resume_screening_workflow.invoke(initial_state)
             
             if result.get("error"):
-                return {
-                    "success": False,
-                    "error": f"{result['error']} (Resume: {resume.get('content', 'N/A')[:50]}...)",
-                    "resume_name": resume["name"],
-                    "jd_name": job_desc["name"]
-                }
+                            return {
+                "success": False,
+                "error": f"{result['error']} (Resume: {resume.get('content', 'N/A')[:50]}...)",
+                "resume_name": resume["name"],
+                "jd_name": job_desc["name"],
+                "jd_original_url": job_desc.get("original_url", "")
+            }
             
             # Format results
             screening_results = result["screening_results"]
@@ -449,6 +733,7 @@ class UnifiedResumeScreener:
                 "resume_content": resume_content,
                 "jd_name": job_desc["name"],
                 "jd_source": job_desc["source"],
+                "jd_original_url": job_desc.get("original_url", ""),  # Add original URL
                 "jd_content": job_description_text,
                 "candidate_info": candidate_info,
                 "screening_results": {
@@ -467,7 +752,8 @@ class UnifiedResumeScreener:
                 "success": False,
                 "error": f"Processing failed: {str(e)} (Resume: {resume.get('content', 'N/A')[:50]}...)",
                 "resume_name": resume["name"],
-                "jd_name": job_desc["name"]
+                "jd_name": job_desc["name"],
+                "jd_original_url": job_desc.get("original_url", "")
             }
     
     def process_matrix(self, resume_input_type: str, jd_input_type: str, 
@@ -730,7 +1016,7 @@ class UnifiedResumeScreener:
         
         # Write header
         writer.writerow([
-            'Resume Name', 'Resume Source', 'Job Description Name', 'Job Description Source',
+            'Resume Name', 'Resume Source', 'Job Description Name', 'Job Description Source', 'Job Description URL',
             'Candidate First Name', 'Candidate Last Name', 'Candidate Email',
             'Overall Fit Rating', 'Risk Score', 'Reward Score',
             'Strengths', 'Weaknesses', 'Risk Explanation', 'Reward Explanation', 'Justification'
@@ -747,6 +1033,7 @@ class UnifiedResumeScreener:
                     result['resume_source'],
                     result['jd_name'],
                     result['jd_source'],
+                    result.get('jd_original_url', ''),  # Add job description URL
                     candidate_info.get('first_name', ''),
                     candidate_info.get('last_name', ''),
                     candidate_info.get('email_address', ''),
@@ -765,6 +1052,7 @@ class UnifiedResumeScreener:
                     result.get('resume_source', ''),
                     result.get('jd_name', ''),
                     result.get('jd_source', ''),
+                    result.get('jd_original_url', ''),  # Add job description URL
                     '', '', '', '', '', '', '', '', '', '', result.get('error', '')
                 ])
         
@@ -814,7 +1102,7 @@ def create_interface():
                     file_count="single",
                     visible=False
                 )
-                gr.Markdown("*CSV file with one column containing resume links*", visible=False)
+                gr.Markdown("*CSV file with one column containing resume links (Google Docs, local files, or URLs)*", visible=False)
             
             with gr.Column():
                 gr.Markdown("### 💼 Job Description Input")
@@ -851,7 +1139,7 @@ def create_interface():
                     file_count="single",
                     visible=False
                 )
-                gr.Markdown("*CSV file with one column containing job description links*", visible=False)
+                gr.Markdown("*CSV file with one column containing job description URLs*", visible=False)
         
         # Instructions (collapsible)
         with gr.Accordion("📖 Instructions", open=False):
@@ -870,6 +1158,25 @@ def create_interface():
             - **Link**: Provide a URL to a job posting (will be scraped)
             - **CSV Links**: Upload a CSV file with multiple job description links (one per row)
             
+            **CSV Link Formats Supported:**
+            
+            **For Resumes:**
+            - **Google Docs**: `https://docs.google.com/document/d/...` (automatically extracts text)
+            - **Local Files**: `/path/to/file.pdf` or `C:\\path\\to\\file.docx` (reads file content)
+            - **Other URLs**: Any HTTP/HTTPS link (processed as Google Drive links)
+            - **Plain Text**: Direct text content in CSV cells
+            
+            **For Job Descriptions:**
+            - **URLs**: Any HTTP/HTTPS link (web scraping extracts job content)
+            - **Local Files**: `/path/to/file.pdf` or `C:\\path\\to\\file.docx` (reads file content)
+            - **Plain Text**: Direct text content in CSV cells
+            
+            **Processing Hierarchy (Fastest to Slowest):**
+            1. **Direct Text**: Ready to process immediately
+            2. **Local Files**: Quick file read and text extraction
+            3. **Google Docs**: PDF download and text extraction
+            4. **Web URLs**: Web scraping and content extraction
+            
             **Processing:**
             - The system will process every resume against every job description
             - Results will be displayed in a table with detailed analysis
@@ -884,10 +1191,11 @@ def create_interface():
             results_html = gr.HTML(label="Results")
             csv_output = gr.Textbox(label="CSV Export Data", visible=False)
         
-        # Download button
+        # Download file component
         download_btn = gr.DownloadButton(
             label="📥 Download Results as CSV",
-            visible=False
+            visible=False,
+            variant="primary"
         )
         
         # Event handlers for radio button changes
@@ -1032,13 +1340,19 @@ def create_interface():
                 table_html = screener.create_results_table(results)
                 csv_data = screener.create_csv_export(results)
                 
-                # Write CSV to a temporary file for download
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
-                tmp.write(csv_data.encode("utf-8"))
-                tmp.close()
-                csv_path = tmp.name
+                # Create temporary CSV file for download
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                csv_filename = f"resume_screening_results_{timestamp}.csv"
                 
-                yield table_html, csv_data, gr.update(visible=True, value=csv_path)
+                # Write CSV to temporary file with the actual desired filename
+                import os
+                temp_dir = tempfile.gettempdir()
+                csv_filepath = os.path.join(temp_dir, csv_filename)
+                
+                with open(csv_filepath, 'w', encoding='utf-8') as f:
+                    f.write(csv_data)
+                
+                yield table_html, csv_data, gr.update(visible=True, value=csv_filepath)
                 
             except Exception as e:
                 error_html = f"""
