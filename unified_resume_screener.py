@@ -165,6 +165,10 @@ class UnifiedResumeScreener:
         # Create name prefix for this resume
         name_prefix = f"Resume {index + 1 if index is not None else ''}"
         
+        # Detect Google Drive folder link
+        if 'drive.google.com/drive/folders/' in link_str:
+            raise gr.Error("Google Drive folder links are not supported. Please provide a direct link to a file (PDF, DOCX, TXT, or Google Doc) instead.")
+
         # 1. Direct text content (fastest - no processing needed)
         if self._is_direct_text(link_str):
             logger.info(f"Processing direct text content: {link_str[:50]}...")
@@ -269,6 +273,10 @@ class UnifiedResumeScreener:
         # Create name prefix for this job description
         name_prefix = f"Job Description {index + 1 if index is not None else ''}"
         
+        # Detect Google Drive folder link
+        if 'drive.google.com/drive/folders/' in link_str:
+            raise gr.Error("Google Drive folder links are not supported. Please provide a direct link to a file (PDF, DOCX, TXT, or Google Doc) instead.")
+
         # 1. Direct text content (fastest - no processing needed)
         if self._is_direct_text(link_str):
             logger.info(f"Processing direct job description text: {link_str[:50]}...")
@@ -1072,7 +1080,12 @@ def create_interface():
                 
                 # Resume input type selection
                 resume_input_type = gr.Radio(
-                    choices=["upload_file", "paste_text", "google_drive", "csv_links"],
+                    choices=[
+                        ("Upload File", "upload_file"),
+                        ("Paste Text", "paste_text"),
+                        ("Google Doc", "google_drive"),
+                        ("CSV Links", "csv_links")
+                    ],
                     label="Resume Input Method",
                     value="upload_file",
                     info="Select how you want to provide resume(s). Google Docs work automatically, other Drive files need API credentials."
@@ -1109,7 +1122,12 @@ def create_interface():
                 
                 # Job description input type selection
                 jd_input_type = gr.Radio(
-                    choices=["upload_file", "paste_text", "link", "csv_links"],
+                    choices=[
+                        ("Upload File", "upload_file"),
+                        ("Paste Text", "paste_text"),
+                        ("Job Link", "link"),
+                        ("CSV Links", "csv_links")
+                    ],
                     label="Job Description Input Method",
                     value="paste_text",
                     info="Select how you want to provide job description(s)"

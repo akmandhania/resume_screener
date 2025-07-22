@@ -165,6 +165,7 @@ cython_debug/
 .uv/
 
 # Project-specific files
+# Google API credentials (DO NOT COMMIT)
 credentials.json
 resume_screener.log
 *.csv

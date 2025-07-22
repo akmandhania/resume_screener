@@ -94,7 +94,11 @@ cp env_example.txt .env
    - Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client IDs"
    - Choose "Desktop application"
    - Download the credentials file
-5. Rename the downloaded file to `credentials.json` and place it in the project root
+5. **Place the downloaded file as `credentials.json` in your project root**
+
+> **Important:**
+> - Do **NOT** commit `credentials.json` to git. This file contains sensitive credentials and is already listed in `.gitignore` for your safety.
+> - Each user should download their own `credentials.json` from Google Cloud Console and place it in their local project root.
 
 ### 5. Configure Environment Variables
 
